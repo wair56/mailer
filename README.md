@@ -409,8 +409,7 @@ mailer/
 
 If you find MailsCool useful, consider buying me a coffee! 如果觉得好用，请我喝杯咖啡吧！
 
-<a href="https://www.buymeacoffee.com/399is"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=☕&slug=399is&button_colour=0D1520&font_colour=00f0ff&font_family=Cookie&outline_colour=1a2940&coffee_colour=00f0ff" /></a>
-
+[![Buy me a coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=☕&slug=399is&button_colour=0D1520&font_colour=00f0ff&font_family=Cookie&outline_colour=1a2940&coffee_colour=00f0ff)](https://www.buymeacoffee.com/399is)
 
 ## License
 
