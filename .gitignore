@@ -33,3 +33,13 @@ Thumbs.db
 # Sensitive
 机器
 docs/
+
+# FRP config (contains tokens)
+frps.toml
+frpc.ini
+
+# Temp files
+*.deb
+debug_code.py
+restore_db.py
+*_backup.*

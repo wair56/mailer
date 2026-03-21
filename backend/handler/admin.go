@@ -126,6 +126,40 @@ func ChangePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "password changed"})
 }
 
+// ResetAdminPassword 超管为其他管理员重置密码（不需要旧密码）
+func ResetAdminPassword(c *gin.Context) {
+	role, _ := c.Get("role")
+	if role != "super_admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "仅超级管理员可重置密码"})
+		return
+	}
+
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+
+	var req struct {
+		NewPassword string `json:"new_password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "new_password is required"})
+		return
+	}
+
+	// 确认目标管理员存在
+	var username string
+	err := database.DB.QueryRow("SELECT username FROM admins WHERE id = ?", id).Scan(&username)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "admin not found"})
+		return
+	}
+
+	hash, _ := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 10)
+	database.DB.Exec("UPDATE admins SET password_hash = ? WHERE id = ?", string(hash), id)
+
+	adminID, _ := c.Get("admin_id")
+	LogAudit(c, adminID.(int64), "reset_admin_password", username, "")
+	c.JSON(http.StatusOK, gin.H{"message": "password reset successfully"})
+}
+
 // 获取管理员已分配的域名 ID 列表
 func GetAdminDomains(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)

@@ -1,17 +1,21 @@
 package handler
 
 import (
+	"context"
 	"mailer/config"
 	"mailer/database"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 func HealthCheck(c *gin.Context) {
-	// 检查数据库连通性
-	err := database.DB.Ping()
+	// 检查数据库连通性（带 3 秒超时，防止连接池耗尽时无限阻塞）
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+	defer cancel()
+	err := database.DB.PingContext(ctx)
 	status := "ok"
 	if err != nil {
 		status = "error"

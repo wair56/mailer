@@ -19,3 +19,12 @@ func TestExtractCode_VerificationCodeIsPattern(t *testing.T) {
 		t.Fatalf("expected code 123456, got %q", got)
 	}
 }
+
+func TestExtractCode_BloombergLEI_LoginCode(t *testing.T) {
+	text := "Please find below your two-factor login code to log into the Bloomberg LEI website:\nSSOX\n\nPlease enter this code on the prompted form."
+
+	got := ExtractCode(text)
+	if got != "SSOX" {
+		t.Fatalf("expected code SSOX, got %q", got)
+	}
+}

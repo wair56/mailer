@@ -14,11 +14,11 @@ var numericCodePatterns = []*regexp.Regexp{
 	// 韩语关键词
 	regexp.MustCompile(`(?i)(?:인증\s*코드|확인\s*코드|보안\s*코드|일회용\s*비밀번호)[：:은는\s]*[\r\n\s]*(\d{4,8})`),
 	// 英文关键词
-	regexp.MustCompile(`(?i)(?:verification|confirm|security|auth)\s*(?:code|pin|number)(?:\s+is)?[:\s]*[\r\n\s]*(\d{4,8})`),
+	regexp.MustCompile(`(?i)(?:verification|confirm|security|auth|login|two[- ]?factor)\s*(?:code|pin|number)(?:\s+is)?[:\s]*[\r\n\s]*(\d{4,8})`),
 	regexp.MustCompile(`(?i)(?:otp|one[-\s]?time)\s*(?:password|code|pin)?(?:\s+is)?[:\s]*[\r\n\s]*(\d{4,8})`),
 	regexp.MustCompile(`(?i)(?:code|pin|passcode)\s*(?:is|:)\s*[\r\n\s]*(\d{4,8})`),
-	// 独立行纯数字
-	regexp.MustCompile(`(?m)^\s*(\d{4,8})\s*$`),
+	// 独立行纯数字（支持邮件引用前缀 '>'）
+	regexp.MustCompile(`(?m)^[>\s]*(\d{4,8})\s*$`),
 }
 
 // 字母+数字混合验证码正则（4-10位）— 紧邻模式（高优先级）
@@ -30,18 +30,18 @@ var alphanumCodeTightPatterns = []*regexp.Regexp{
 	// 韩语关键词
 	regexp.MustCompile(`(?i)(?:인증\s*코드|확인\s*코드|보안\s*코드|일회용\s*비밀번호)[：:은는\s]*[\r\n\s]*([A-Z0-9]{4,10})`),
 	// 英文关键词
-	regexp.MustCompile(`(?i)(?:verification|confirm|security|auth)\s*(?:code|pin|number)(?:\s+is)?[:\s]*[\r\n\s]*([A-Z0-9]{4,10})`),
+	regexp.MustCompile(`(?i)(?:verification|confirm|security|auth|login|two[- ]?factor)\s*(?:code|pin|number)(?:\s+is)?[:\s]*[\r\n\s]*([A-Z0-9]{4,10})`),
 	regexp.MustCompile(`(?i)(?:otp|one[-\s]?time)\s*(?:password|code|pin)?(?:\s+is)?[:\s]*[\r\n\s]*([A-Z0-9]{4,10})`),
 	regexp.MustCompile(`(?i)(?:code|pin|passcode)\s*(?:is|:)\s*[\r\n\s]*([A-Z0-9]{4,10})`),
 }
 
-// 独立行字母数字混合正则（兜底，单独处理）
-var alphanumStandaloneLine = regexp.MustCompile(`(?mi)^\s*([A-Za-z0-9]{4,10})\s*$`)
+// 独立行字母数字混合正则（兜底，单独处理，支持邮件引用前缀 '>'）
+var alphanumStandaloneLine = regexp.MustCompile(`(?mi)^[>\s]*([A-Za-z0-9]{4,10})\s*$`)
 
 // 宽松模式：关键词和验证码之间有间隔文本（低优先级）
 var alphanumCodeLoosePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?si)(?:验证码|校验码|确认码|安全码|动态码|一次性验证码|一次性密码).{0,300}?\b([A-Za-z0-9]{4,10})\b`),
-	regexp.MustCompile(`(?si)(?:verification|confirm|security|auth)\s*(?:code|pin|number).{0,300}?\b([A-Za-z0-9]{4,10})\b`),
+	regexp.MustCompile(`(?si)(?:verification|confirm|security|auth|login|two[- ]?factor)\s*(?:code|pin|number).{0,300}?\b([A-Za-z0-9]{4,10})\b`),
 }
 
 // 常见假阳性，排除这些值
@@ -70,7 +70,15 @@ func isLikelyCode(s string) bool {
 	if strings.Contains(lower, "@") || strings.Contains(lower, ".") {
 		return false
 	}
-	return hasLetterAndDigit(s)
+	// 字母+数字混合 → 验证码
+	if hasLetterAndDigit(s) {
+		return true
+	}
+	// 全大写字母 4-10 位（如 SSOX）→ 也是验证码
+	if len(s) >= 4 && len(s) <= 10 && isAllUpperAlpha(s) {
+		return true
+	}
+	return false
 }
 
 // hasLetterAndDigit 检查字符串是否同时包含字母和数字
@@ -86,6 +94,16 @@ func hasLetterAndDigit(s string) bool {
 		}
 	}
 	return hasLetter && hasDigit
+}
+
+// isAllUpperAlpha 检查是否全部为大写字母
+func isAllUpperAlpha(s string) bool {
+	for _, c := range s {
+		if c < 'A' || c > 'Z' {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // URL 提取正则

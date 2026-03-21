@@ -31,48 +31,48 @@ func ApiKeyAuth() gin.HandlerFunc {
 
 		prefix := key[:11] // "sk_" + 8 chars
 
-		// 查找匹配的 API Key
-		rows, err := database.DB.Query(
-			"SELECT id, key_hash, COALESCE(ip_whitelist,''), rate_limit, is_active, expires_at FROM api_keys WHERE key_prefix = ?",
-			prefix,
-		)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-			c.Abort()
-			return
-		}
-		defer rows.Close()
-
-		var matched struct {
+		// 查找匹配的 API Key（先收集候选项，立即释放数据库连接，再做耗时的 bcrypt 比对）
+		type candidate struct {
 			id          int64
+			keyHash     string
 			ipWhitelist string
 			rateLimit   int
 		}
+		var candidates []candidate
+		func() {
+			rows, err := database.DB.Query(
+				"SELECT id, key_hash, COALESCE(ip_whitelist,''), rate_limit, is_active, expires_at FROM api_keys WHERE key_prefix = ?",
+				prefix,
+			)
+			if err != nil {
+				return
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var id int64
+				var keyHash, ipWhitelist string
+				var rateLimit int
+				var isActive int
+				var expiresAt *time.Time
+				if err := rows.Scan(&id, &keyHash, &ipWhitelist, &rateLimit, &isActive, &expiresAt); err != nil {
+					continue
+				}
+				if isActive == 0 {
+					continue
+				}
+				if expiresAt != nil && expiresAt.Before(time.Now()) {
+					continue
+				}
+				candidates = append(candidates, candidate{id, keyHash, ipWhitelist, rateLimit})
+			}
+		}()
+
+		// bcrypt 比对在连接释放后进行，不会阻塞数据库连接池
+		var matched candidate
 		found := false
-
-		for rows.Next() {
-			var id int64
-			var keyHash, ipWhitelist string
-			var rateLimit int
-			var isActive int
-			var expiresAt *time.Time
-
-			if err := rows.Scan(&id, &keyHash, &ipWhitelist, &rateLimit, &isActive, &expiresAt); err != nil {
-				continue
-			}
-
-			if isActive == 0 {
-				continue
-			}
-
-			if expiresAt != nil && expiresAt.Before(time.Now()) {
-				continue
-			}
-
-			if err := bcrypt.CompareHashAndPassword([]byte(keyHash), []byte(key)); err == nil {
-				matched.id = id
-				matched.ipWhitelist = ipWhitelist
-				matched.rateLimit = rateLimit
+		for _, cand := range candidates {
+			if err := bcrypt.CompareHashAndPassword([]byte(cand.keyHash), []byte(key)); err == nil {
+				matched = cand
 				found = true
 				break
 			}

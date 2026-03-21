@@ -42,6 +42,17 @@
       </n-form>
     </n-modal>
 
+    <!-- 超管重置密码对话框 -->
+    <n-modal v-model:show="showResetModal" preset="dialog" :title="'重置密码 - ' + (resetTarget?.username || '')"
+      :positive-text="t('common_confirm')" :negative-text="t('common_cancel')" @positive-click="handleResetPassword" style="width: 420px">
+      <n-form :model="resetForm" label-placement="left" label-width="80">
+        <n-form-item label="新密码">
+          <n-input v-model:value="resetForm.new_password" type="password" placeholder="请输入新密码"
+            show-password-on="click" />
+        </n-form-item>
+      </n-form>
+    </n-modal>
+
     <!-- 域名分配对话框 -->
     <n-modal v-model:show="showDomainModal" preset="dialog" :title="t('admin_assign_title') + ' - ' + domainTarget?.username"
       :positive-text="t('common_save')" :negative-text="t('common_cancel')" @positive-click="handleSaveDomains" style="width: 520px">
@@ -64,7 +75,7 @@
 <script setup>
 import { ref, h, computed, onMounted } from 'vue'
 import { NButton, NTag, NSpace, useMessage, useDialog } from 'naive-ui'
-import { listAdmins, createAdmin, deleteAdmin, changePassword, listDomains, getAdminDomains, updateAdminDomains } from '../api'
+import { listAdmins, createAdmin, deleteAdmin, changePassword, resetAdminPassword, listDomains, getAdminDomains, updateAdminDomains } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useI18n } from '../i18n'
 
@@ -77,6 +88,8 @@ const admins = ref([])
 const loading = ref(false)
 const showCreateModal = ref(false)
 const showPasswordModal = ref(false)
+const showResetModal = ref(false)
+const resetTarget = ref(null)
 const showDomainModal = ref(false)
 const domainLoading = ref(false)
 const domainTarget = ref(null)
@@ -87,6 +100,7 @@ const isSuperAdmin = computed(() => auth.admin?.role === 'super_admin')
 
 const createForm = ref({ username: '', password: '', role: 'admin' })
 const passwordForm = ref({ old_password: '', new_password: '' })
+const resetForm = ref({ new_password: '' })
 
 const roleOptions = [
   { label: 'Admin', value: 'admin' },
@@ -118,6 +132,10 @@ const columns = [
         }, () => t('admin_change_password')))
       }
       if (isSuperAdmin.value && row.role !== 'super_admin') {
+        buttons.push(h(NButton, {
+          size: 'small', quaternary: true, type: 'warning',
+          onClick: () => { resetTarget.value = row; resetForm.value.new_password = ''; showResetModal.value = true }
+        }, () => '重置密码'))
         buttons.push(h(NButton, {
           size: 'small', quaternary: true, type: 'success',
           onClick: () => handleAssignDomains(row)
@@ -210,6 +228,18 @@ async function handleChangePassword() {
     passwordForm.value = { old_password: '', new_password: '' }
     auth.logout()
   } catch (e) { message.error(e.response?.data?.error || t('admin_password_fail')); return false }
+}
+
+async function handleResetPassword() {
+  if (!resetForm.value.new_password) {
+    message.warning('请输入新密码')
+    return false
+  }
+  try {
+    await resetAdminPassword(resetTarget.value.id, resetForm.value)
+    message.success(`已重置 ${resetTarget.value.username} 的密码`)
+    resetForm.value = { new_password: '' }
+  } catch (e) { message.error(e.response?.data?.error || '重置密码失败'); return false }
 }
 
 onMounted(fetchData)

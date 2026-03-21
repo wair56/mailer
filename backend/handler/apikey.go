@@ -69,11 +69,25 @@ func ListApiKeys(c *gin.Context) {
 
 	// 第二步：为每个 key 加载关联域名及统计数据（rows 已被彻底关闭，不会死锁）
 	for i := range keys {
-		domainRows, _ := database.DB.Query(
-			`SELECT d.id, d.name, d.is_active FROM domains d 
-			 INNER JOIN api_key_domains akd ON d.id = akd.domain_id 
-			 WHERE akd.api_key_id = ?`, keys[i].ID,
-		)
+		var domainQuery string
+		var domainArgs []interface{}
+
+		if role == "super_admin" {
+			// 超管看到该 key 的所有关联域名
+			domainQuery = `SELECT d.id, d.name, d.is_active FROM domains d 
+				 INNER JOIN api_key_domains akd ON d.id = akd.domain_id 
+				 WHERE akd.api_key_id = ?`
+			domainArgs = []interface{}{keys[i].ID}
+		} else {
+			// 普通管理员只看到自己有权限的域名
+			domainQuery = `SELECT d.id, d.name, d.is_active FROM domains d 
+				 INNER JOIN api_key_domains akd ON d.id = akd.domain_id 
+				 INNER JOIN admin_domains ad ON d.id = ad.domain_id
+				 WHERE akd.api_key_id = ? AND ad.admin_id = ?`
+			domainArgs = []interface{}{keys[i].ID, adminID}
+		}
+
+		domainRows, _ := database.DB.Query(domainQuery, domainArgs...)
 		if domainRows != nil {
 			func() {
 				defer domainRows.Close()
@@ -90,14 +104,24 @@ func ListApiKeys(c *gin.Context) {
 			keys[i].Domains = []database.Domain{}
 		}
 
-		// 统计关联域名下的邮件数和邮箱数
+		// 统计：非超管只统计有权限域名的数据
+		var statsFilter string
+		var statsArgs []interface{}
+		if role == "super_admin" {
+			statsFilter = `domain_id IN (SELECT domain_id FROM api_key_domains WHERE api_key_id = ?)`
+			statsArgs = []interface{}{keys[i].ID}
+		} else {
+			statsFilter = `domain_id IN (SELECT akd.domain_id FROM api_key_domains akd INNER JOIN admin_domains ad ON akd.domain_id = ad.domain_id WHERE akd.api_key_id = ? AND ad.admin_id = ?)`
+			statsArgs = []interface{}{keys[i].ID, adminID}
+		}
+
 		database.DB.QueryRow(
-			`SELECT COUNT(*) FROM emails WHERE domain_id IN (SELECT domain_id FROM api_key_domains WHERE api_key_id = ?)`,
-			keys[i].ID,
+			`SELECT COUNT(*) FROM emails WHERE `+statsFilter,
+			statsArgs...,
 		).Scan(&keys[i].TotalEmails)
 		database.DB.QueryRow(
-			`SELECT COUNT(*) FROM mailboxes WHERE domain_id IN (SELECT domain_id FROM api_key_domains WHERE api_key_id = ?)`,
-			keys[i].ID,
+			`SELECT COUNT(*) FROM mailboxes WHERE `+statsFilter,
+			statsArgs...,
 		).Scan(&keys[i].TotalMailboxes)
 	}
 	if keys == nil {

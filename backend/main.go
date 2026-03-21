@@ -140,6 +140,7 @@ func main() {
 			superAdmin.GET("/admins", handler.ListAdmins)
 			superAdmin.POST("/admins", handler.CreateAdmin)
 			superAdmin.DELETE("/admins/:id", handler.DeleteAdmin)
+		superAdmin.PUT("/admins/:id/password", handler.ResetAdminPassword)
 			superAdmin.GET("/admins/:id/domains", handler.GetAdminDomains)
 			superAdmin.PUT("/admins/:id/domains", handler.UpdateAdminDomains)
 			superAdmin.GET("/download-db", handler.DownloadDatabase)
@@ -198,6 +199,9 @@ func main() {
 			}
 
 			// 尝试作为静态文件提供
+			if len(path) == 0 {
+				path = "/"
+			}
 			filePath := path[1:] // 去掉前导 /
 			if filePath != "" {
 				if f, err := distFS.Open(filePath); err == nil {

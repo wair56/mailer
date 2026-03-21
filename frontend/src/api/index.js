@@ -66,6 +66,7 @@ export const createAdmin = (data) => api.post('/admin/admins', data)
 export const deleteAdmin = (id) => api.delete(`/admin/admins/${id}`)
 export const getAdminDomains = (id) => api.get(`/admin/admins/${id}/domains`)
 export const updateAdminDomains = (id, data) => api.put(`/admin/admins/${id}/domains`, data)
+export const resetAdminPassword = (id, data) => api.put(`/admin/admins/${id}/password`, data)
 
 // === Audit Logs ===
 export const listAuditLogs = (params) => api.get('/admin/audit-logs', { params })

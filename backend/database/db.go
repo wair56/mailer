@@ -19,13 +19,15 @@ var DB *sql.DB
 
 func Init() {
 	var err error
-	DB, err = sql.Open("sqlite3", config.C.DBPath+"?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on")
+	DB, err = sql.Open("sqlite3", config.C.DBPath+"?_journal_mode=WAL&_busy_timeout=10000&_foreign_keys=on")
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 
-	DB.SetMaxOpenConns(4) // WAL 模式支持并发读，允许多连接
-	DB.SetMaxIdleConns(4)
+	DB.SetMaxOpenConns(1)  // SQLite 单写入：强制序列化所有连接，彻底杜绝并发锁争用
+	DB.SetMaxIdleConns(1)
+	DB.SetConnMaxLifetime(0)
+	DB.SetConnMaxIdleTime(0)
 
 	if err = DB.Ping(); err != nil {
 		log.Fatalf("Failed to ping database: %v", err)
