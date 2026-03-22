@@ -198,9 +198,15 @@ async function fetchData() {
     if (filters.value.sender_domain) params.sender_domain = filters.value.sender_domain
     if (filters.value.has_code) params.has_code = '1'
 
-    const { data } = await listEmails(params)
+    // Phase 1: 先加载数据（跳过 COUNT），立即展示
+    const { data } = await listEmails({ ...params, skip_count: '1' })
     emails.value = data.data
-    total.value = data.total
+    loading.value = false
+
+    // Phase 2: 异步获取总数（用于分页）
+    listEmails(params).then(res => {
+      total.value = res.data.total
+    }).catch(() => {})
   } catch {} finally { loading.value = false }
 }
 

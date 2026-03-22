@@ -271,8 +271,10 @@ func AdminListEmails(c *gin.Context) {
 		where += " AND e.extracted_code != ''"
 	}
 
-	var total int64
-	database.DB.QueryRow("SELECT COUNT(*) FROM emails e "+where, args...).Scan(&total)
+	var total int64 = -1
+	if c.Query("skip_count") != "1" {
+		database.DB.QueryRow("SELECT COUNT(*) FROM emails e "+where, args...).Scan(&total)
+	}
 
 	queryArgs := append(args, size, offset)
 	rows, err := database.DB.Query(
