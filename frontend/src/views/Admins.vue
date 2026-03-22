@@ -135,7 +135,7 @@ const columns = [
         buttons.push(h(NButton, {
           size: 'small', quaternary: true, type: 'warning',
           onClick: () => { resetTarget.value = row; resetForm.value.new_password = ''; showResetModal.value = true }
-        }, () => '重置密码'))
+        }, () => t('admin_reset_password')))
         buttons.push(h(NButton, {
           size: 'small', quaternary: true, type: 'success',
           onClick: () => handleAssignDomains(row)

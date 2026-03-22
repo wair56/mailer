@@ -291,6 +291,7 @@
   "admin_created_at": "创建时间",
   "admin_actions": "操作",
   "admin_change_password": "改密",
+  "admin_reset_password": "重置密码",
   "admin_assign_domains": "域名",
   "admin_delete": "删除",
   "admin_change_password_title": "修改密码",

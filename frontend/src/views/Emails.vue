@@ -17,14 +17,23 @@
     </div>
 
     <!-- 黑名单域名 -->
-    <div class="blacklist-bar" v-if="excludeDomains.length > 0 || showBlacklistInput">
+    <div class="blacklist-bar">
       <span class="blacklist-label">{{ locale === 'zh' ? '🚫 屏蔽域名:' : '🚫 Blocked:' }}</span>
       <n-tag v-for="(d, i) in excludeDomains" :key="d" closable size="small" type="error"
         @close="removeExcludeDomain(i)" style="margin-right: 4px">{{ d }}</n-tag>
-      <n-input v-if="showBlacklistInput" v-model:value="blacklistInput" size="tiny"
+      <n-input v-if="showBlacklistInput" v-model:value="blacklistInput" size="small"
         :placeholder="locale === 'zh' ? '输入域名回车添加' : 'domain, Enter to add'"
-        style="width: 160px" @keyup.enter="addExcludeDomain" @blur="showBlacklistInput = false" ref="blacklistInputRef" />
-      <n-button v-else size="tiny" quaternary @click="showBlacklistInput = true">+</n-button>
+        style="width: 180px" @keyup.enter="addExcludeDomain" @blur="showBlacklistInput = false" autofocus />
+      <n-button v-else size="small" dashed @click="showBlacklistInput = true" style="min-width: 80px">
+        {{ locale === 'zh' ? '+ 添加' : '+ Add' }}
+      </n-button>
+      <n-button v-if="excludeDomains.length > 0" size="tiny" quaternary type="warning"
+        @click="excludeDomains = []; localStorage.setItem('email_exclude_domains', '[]'); page = 1; fetchData()">
+        {{ locale === 'zh' ? '清空' : 'Clear' }}
+      </n-button>
+      <span v-if="excludeDomains.length === 0" style="font-size: 11px; color: var(--text-secondary); margin-left: 4px">
+        {{ locale === 'zh' ? '右键发件人可快速添加' : 'Right-click sender to add' }}
+      </span>
     </div>
 
     <n-data-table :columns="columns" :data="emails" :loading="loading" :bordered="false"

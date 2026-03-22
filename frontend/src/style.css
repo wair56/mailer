@@ -60,15 +60,15 @@ body::after {
 
 /* ===== Scrollbar ===== */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: var(--bg-secondary);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-color);
-  border-radius: 3px;
+  border-radius: 5px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-dim);

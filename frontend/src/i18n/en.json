@@ -291,6 +291,7 @@
   "admin_created_at": "Created",
   "admin_actions": "Actions",
   "admin_change_password": "Password",
+  "admin_reset_password": "Reset Pwd",
   "admin_assign_domains": "Domains",
   "admin_delete": "Delete",
   "admin_change_password_title": "Change Password",
