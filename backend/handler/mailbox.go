@@ -58,18 +58,38 @@ func AdminListMailboxes(c *gin.Context) {
 	role, _ := c.Get("role")
 	adminID, _ := c.Get("admin_id")
 
-	var whereClause string
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 100 {
+		size = 20
+	}
+	offset := (page - 1) * size
+
+	where := "WHERE 1=1"
 	var args []interface{}
 
-	if role == "super_admin" {
-		// 超管看所有
-		whereClause = ""
-	} else {
-		// 非超管：仅看自己域名下的邮箱
-		whereClause = "WHERE m.domain_id IN (SELECT domain_id FROM admin_domains WHERE admin_id = ?)"
+	if role != "super_admin" {
+		where += " AND m.domain_id IN (SELECT domain_id FROM admin_domains WHERE admin_id = ?)"
 		args = append(args, adminID)
 	}
+	if domainID := c.Query("domain_id"); domainID != "" {
+		where += " AND m.domain_id = ?"
+		args = append(args, domainID)
+	}
+	if search := c.Query("search"); search != "" {
+		where += " AND m.email LIKE ?"
+		args = append(args, "%"+search+"%")
+	}
 
+	var total int64 = -1
+	if c.Query("skip_count") != "1" {
+		database.DB.QueryRow("SELECT COUNT(*) FROM mailboxes m "+where, args...).Scan(&total)
+	}
+
+	queryArgs := append(args, size, offset)
 	rows, err := database.DB.Query(`
 		SELECT m.id, m.email, COALESCE(m.password_plain,''), m.domain_id, COALESCE(d.name,''),
 		       COALESCE(m.is_temp,0), m.expires_at, m.created_at,
@@ -77,9 +97,9 @@ func AdminListMailboxes(c *gin.Context) {
 		       COALESCE(m.created_ip,''), COALESCE(m.created_ua,''), COALESCE(m.webhook_url,'')
 		FROM mailboxes m
 		LEFT JOIN domains d ON d.id = m.domain_id
-		`+whereClause+`
-		ORDER BY m.created_at DESC
-	`, args...)
+		`+where+`
+		ORDER BY m.created_at DESC LIMIT ? OFFSET ?
+	`, queryArgs...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -109,7 +129,12 @@ func AdminListMailboxes(c *gin.Context) {
 	if items == nil {
 		items = []MailboxItem{}
 	}
-	c.JSON(http.StatusOK, gin.H{"data": items})
+	c.JSON(http.StatusOK, database.PaginatedResponse{
+		Total: total,
+		Page:  page,
+		Size:  size,
+		Data:  items,
+	})
 }
 
 type CreateMailboxRequest struct {

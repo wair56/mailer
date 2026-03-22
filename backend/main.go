@@ -206,9 +206,19 @@ func main() {
 			if filePath != "" {
 				if f, err := distFS.Open(filePath); err == nil {
 					f.Close()
+					// 对 assets 目录的文件设置长期缓存（文件名含 hash）
+					if strings.HasPrefix(path, "/assets/") {
+						c.Header("Cache-Control", "public, max-age=31536000, immutable")
+					}
 					fileServer.ServeHTTP(c.Writer, c.Request)
 					return
 				}
+			}
+
+			// /assets/ 路径的文件不存在时直接返回 404（不要 fallback 到 index.html）
+			if strings.HasPrefix(path, "/assets/") {
+				c.String(404, "Not Found")
+				return
 			}
 
 			// SPA fallback: 返回 index.html（禁缓存以确保每次获取最新版）

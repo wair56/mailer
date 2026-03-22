@@ -1,14 +1,20 @@
 <template>
   <div>
     <div class="filter-bar">
-      <n-input v-model:value="filterText" :placeholder="t('mailbox_filter_ph')" clearable
-        style="width: 220px" size="small" />
-      <n-button size="small" quaternary @click="filterText = ''">{{ t('email_reset') }}</n-button>
-      <span class="list-count">{{ filteredMailboxes.length }} {{ t('mailbox_count_label') }}</span>
+      <n-input v-model:value="searchText" :placeholder="t('mailbox_filter_ph')" clearable
+        style="width: 220px" size="small" @keyup.enter="handleSearch" />
+      <n-button type="primary" size="small" @click="handleSearch">{{ t('email_search') }}</n-button>
+      <n-button size="small" quaternary @click="searchText = ''; handleSearch()">{{ t('email_reset') }}</n-button>
+      <span class="list-count">{{ total >= 0 ? total : '...' }} {{ t('mailbox_count_label') }}</span>
       <n-button type="primary" size="small" @click="showCreate = true">{{ t('mailbox_create') }}</n-button>
     </div>
 
-    <n-data-table :columns="columns" :data="filteredMailboxes" :loading="loading" :bordered="false" />
+    <n-data-table :columns="columns" :data="mailboxes" :loading="loading" :bordered="false" />
+
+    <div style="display: flex; justify-content: center; margin-top: 16px" v-if="total > size">
+      <n-pagination v-model:page="page" :page-count="Math.ceil(total / size)"
+        :page-size="size" show-quick-jumper @update:page="fetchData" />
+    </div>
 
     <!-- 创建邮箱 -->
     <n-modal v-model:show="showCreate" preset="dialog" :title="t('mailbox_create_title')" :positive-text="t('mailbox_create_btn')"
@@ -53,9 +59,9 @@
 </template>
 
 <script setup>
-import { ref, h, computed, onMounted } from 'vue'
+import { ref, h, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NButton, NTag, NTooltip, useMessage, useDialog } from 'naive-ui'
+import { NButton, NTag, NTooltip, useMessage, useDialog, NPagination } from 'naive-ui'
 import { listMailboxes, createMailbox, updateMailbox, deleteMailbox, listDomains } from '../api'
 import { useI18n } from '../i18n'
 
@@ -71,17 +77,16 @@ const showCreate = ref(false)
 const showEdit = ref(false)
 const createForm = ref({ prefix: '', domain: '', password: '', webhook_url: '' })
 const editForm = ref({ id: null, email: '', is_temp: false, expires_at_ts: null, webhook_url: '' })
-const filterText = ref('')
+const searchText = ref('')
+const page = ref(1)
+const size = ref(20)
+const total = ref(0)
 const domainOptions = ref([])
 
-const filteredMailboxes = computed(() => {
-  if (!filterText.value) return mailboxes.value
-  const kw = filterText.value.toLowerCase()
-  return mailboxes.value.filter(m =>
-    (m.email || '').toLowerCase().includes(kw) ||
-    (m.domain_name || '').toLowerCase().includes(kw)
-  )
-})
+function handleSearch() {
+  page.value = 1
+  fetchData()
+}
 
 const typeOptions = [
   { label: () => t('mailbox_type_long'), value: false },
@@ -138,14 +143,14 @@ const columns = [
     render: row => new Date(row.created_at).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US')
   },
   {
-    title: () => t('mailbox_source'), key: 'created_ip', width: 140,
+    title: () => t('mailbox_source'), key: 'created_ip', width: 140, ellipsis: { tooltip: true },
     render: row => {
       const ip = row.created_ip || '-'
       const ua = row.created_ua || ''
-      if (!ua) return h('span', { style: 'font-size: 12px; color: #8c8c8c' }, ip)
+      const tipText = ua ? `${ip}\n${ua}` : ip
       return h(NTooltip, { trigger: 'hover' }, {
-        trigger: () => h('span', { style: 'font-size: 12px; color: #5e7290; cursor: help; text-decoration: underline dotted' }, ip),
-        default: () => h('div', { style: 'max-width: 360px; word-break: break-all; font-size: 12px' }, ua)
+        trigger: () => h('span', { style: 'font-size: 12px; color: #5e7290; cursor: help; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; max-width: 130px' }, ip),
+        default: () => h('div', { style: 'max-width: 400px; word-break: break-all; font-size: 12px; white-space: pre-wrap' }, tipText)
       })
     }
   },
@@ -207,8 +212,17 @@ async function handleUpdate() {
 async function fetchData() {
   loading.value = true
   try {
-    const { data } = await listMailboxes()
+    const params = { page: page.value, size: size.value, skip_count: '1' }
+    if (searchText.value) params.search = searchText.value
+    const { data } = await listMailboxes(params)
     mailboxes.value = data.data
+    loading.value = false
+    // Async get total
+    const countParams = { ...params }
+    delete countParams.skip_count
+    listMailboxes(countParams).then(res => {
+      total.value = res.data.total
+    }).catch(() => {})
   } catch {} finally { loading.value = false }
 }
 
@@ -273,8 +287,7 @@ async function fetchDomains() {
 }
 
 onMounted(() => {
-  // 从 URL query 初始化筛选
-  if (route.query.domain) filterText.value = route.query.domain
+  if (route.query.domain) searchText.value = route.query.domain
   fetchDomains()
   fetchData()
 })

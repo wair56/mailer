@@ -81,7 +81,7 @@ export const getSystemLogs = (lines = 100) => api.get('/admin/system-logs', { pa
 export const toggleEmailStar = (id) => api.put(`/admin/emails/${id}/star`)
 
 // === Mailboxes ===
-export const listMailboxes = () => api.get('/admin/mailboxes')
+export const listMailboxes = (params) => api.get('/admin/mailboxes', { params })
 export const createMailbox = (data) => api.post('/admin/mailboxes', data)
 export const updateMailbox = (id, data) => api.put(`/admin/mailboxes/${id}`, data)
 export const deleteMailbox = (id, deleteEmails = false) => api.delete(`/admin/mailboxes/${id}${deleteEmails ? '?delete_emails=true' : ''}`)
