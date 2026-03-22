@@ -269,7 +269,7 @@ func AdminListEmails(c *gin.Context) {
 			d = strings.TrimSpace(d)
 			if d != "" {
 				where += " AND e.sender NOT LIKE ?"
-				args = append(args, "%@"+d)
+				args = append(args, "%@%"+d+"%")
 			}
 		}
 	}

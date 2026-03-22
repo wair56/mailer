@@ -62,7 +62,7 @@ const columns = [
   },
   { title: () => t('audit_target'), key: 'target', ellipsis: { tooltip: true } },
   { title: () => t('audit_detail'), key: 'detail', ellipsis: { tooltip: true } },
-  { title: 'IP', key: 'ip', width: 140, ellipsis: { tooltip: true } },
+  { title: 'IP', key: 'ip', width: 220, ellipsis: { tooltip: true } },
   { title: () => t('audit_time'), key: 'created_at', width: 170,
     render: row => new Date(row.created_at).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US')
   },
