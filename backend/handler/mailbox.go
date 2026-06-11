@@ -195,6 +195,83 @@ func AdminCreateMailbox(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "created"})
 }
 
+// ===== 批量生成长期邮箱 =====
+
+type BatchCreateMailboxRequest struct {
+	Domain string `json:"domain" binding:"required"`
+	Count  int    `json:"count" binding:"required"`
+}
+
+type BatchCreatedMailbox struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func AdminBatchCreateMailbox(c *gin.Context) {
+	var req BatchCreateMailboxRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "domain and count required"})
+		return
+	}
+	if req.Count < 1 || req.Count > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "count must be between 1 and 500"})
+		return
+	}
+
+	// 查域名 ID
+	var domainID int64
+	if err := database.DB.QueryRow("SELECT id FROM domains WHERE name = ?", req.Domain).Scan(&domainID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "domain not found: " + req.Domain})
+		return
+	}
+
+	// 校验域名权限
+	if !hasDomainAccess(c, domainID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作此域名的邮箱"})
+		return
+	}
+
+	created := make([]BatchCreatedMailbox, 0, req.Count)
+	attempts := 0
+	maxAttempts := req.Count * 5 // 留出重名重试余量
+
+	for len(created) < req.Count && attempts < maxAttempts {
+		attempts++
+
+		email := generateRealisticUsername() + "@" + req.Domain
+
+		// 生成独立随机密码
+		pwdBytes := make([]byte, 6)
+		rand.Read(pwdBytes)
+		password := hex.EncodeToString(pwdBytes)
+
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), 10)
+		if err != nil {
+			continue
+		}
+		encryptedPwd, _ := config.Encrypt(password)
+
+		_, err = database.DB.Exec(
+			"INSERT INTO mailboxes (email, password_plain, password_hash, domain_id) VALUES (?, ?, ?, ?)",
+			email, encryptedPwd, string(hash), domainID,
+		)
+		if err != nil {
+			// 重名则跳过重试，其他错误也跳过
+			continue
+		}
+		created = append(created, BatchCreatedMailbox{Email: email, Password: password})
+	}
+
+	adminID, _ := c.Get("admin_id")
+	LogAudit(c, adminID.(int64), "batch_create_mailbox", req.Domain, fmt.Sprintf("created: %d", len(created)))
+
+	c.JSON(http.StatusOK, gin.H{
+		"created":   len(created),
+		"requested": req.Count,
+		"mailboxes": created,
+	})
+}
+
 func AdminDeleteMailbox(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 

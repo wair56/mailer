@@ -83,5 +83,6 @@ export const toggleEmailStar = (id) => api.put(`/admin/emails/${id}/star`)
 // === Mailboxes ===
 export const listMailboxes = (params) => api.get('/admin/mailboxes', { params })
 export const createMailbox = (data) => api.post('/admin/mailboxes', data)
+export const batchCreateMailboxes = (data) => api.post('/admin/mailboxes/batch', data, { timeout: 60000 })
 export const updateMailbox = (id, data) => api.put(`/admin/mailboxes/${id}`, data)
 export const deleteMailbox = (id, deleteEmails = false) => api.delete(`/admin/mailboxes/${id}${deleteEmails ? '?delete_emails=true' : ''}`)

@@ -7,9 +7,18 @@
       <n-button size="small" quaternary @click="searchText = ''; handleSearch()">{{ t('email_reset') }}</n-button>
       <span class="list-count">{{ total >= 0 ? total : '...' }} {{ t('mailbox_count_label') }}</span>
       <n-button type="primary" size="small" @click="showCreate = true">{{ t('mailbox_create') }}</n-button>
+      <n-button type="primary" size="small" secondary @click="openBatch">{{ t('mailbox_batch_create') }}</n-button>
+      <n-button v-if="checkedRowKeys.length" type="success" size="small" secondary @click="exportSelected">
+        {{ t('mailbox_export_selected', { count: checkedRowKeys.length }) }}
+      </n-button>
+      <n-button v-if="checkedRowKeys.length" size="small" quaternary @click="clearSelection">
+        {{ t('mailbox_clear_selection') }}
+      </n-button>
     </div>
 
-    <n-data-table :columns="columns" :data="mailboxes" :loading="loading" :bordered="false" :scroll-x="1200" />
+    <n-data-table :columns="columns" :data="mailboxes" :loading="loading" :bordered="false" :scroll-x="1240"
+      :row-key="row => row.id" v-model:checked-row-keys="checkedRowKeys"
+      @update:checked-row-keys="onCheckedChange" />
 
     <div style="display: flex; justify-content: center; margin-top: 16px" v-if="total > size">
       <n-pagination v-model:page="page" :page-count="Math.ceil(total / size)"
@@ -55,14 +64,38 @@
         </n-form-item>
       </n-form>
     </n-modal>
+
+    <!-- 批量生成长期邮箱 -->
+    <n-modal v-model:show="showBatch" preset="dialog" :title="t('mailbox_batch_title')"
+      :positive-text="batchResult.length ? t('mailbox_batch_export') : t('mailbox_batch_gen_btn')"
+      :negative-text="t('common_cancel')"
+      @positive-click="batchResult.length ? exportBatch() : handleBatch()"
+      @negative-click="closeBatch" style="width: 480px">
+      <template v-if="!batchResult.length">
+        <n-form :model="batchForm" label-placement="left" label-width="80">
+          <n-form-item :label="t('mailbox_create_domain')">
+            <n-select v-model:value="batchForm.domain" :options="domainOptions" :placeholder="t('mailbox_create_domain_ph')" />
+          </n-form-item>
+          <n-form-item :label="t('mailbox_batch_count')">
+            <n-input-number v-model:value="batchForm.count" :min="1" :max="500" style="width: 100%" />
+          </n-form-item>
+        </n-form>
+        <div class="batch-hint">{{ t('mailbox_batch_hint') }}</div>
+      </template>
+      <template v-else>
+        <div class="batch-done">{{ t('mailbox_batch_done', { count: batchResult.length }) }}</div>
+        <n-input type="textarea" :value="batchText" readonly :rows="10"
+          style="font-family: 'JetBrains Mono', monospace; font-size: 12px" />
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, h, onMounted } from 'vue'
+import { ref, h, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NButton, NTag, NTooltip, useMessage, useDialog, NPagination } from 'naive-ui'
-import { listMailboxes, createMailbox, updateMailbox, deleteMailbox, listDomains } from '../api'
+import { listMailboxes, createMailbox, batchCreateMailboxes, updateMailbox, deleteMailbox, listDomains } from '../api'
 import { useI18n } from '../i18n'
 
 const { t, locale } = useI18n()
@@ -75,8 +108,13 @@ const mailboxes = ref([])
 const loading = ref(false)
 const showCreate = ref(false)
 const showEdit = ref(false)
+const showBatch = ref(false)
 const createForm = ref({ prefix: '', domain: '', password: '', webhook_url: '' })
 const editForm = ref({ id: null, email: '', is_temp: false, expires_at_ts: null, webhook_url: '' })
+const batchForm = ref({ domain: '', count: 10 })
+const batchResult = ref([])
+const checkedRowKeys = ref([])
+const selectedRowsMap = ref({}) // id -> row，跨页缓存所选行
 const searchText = ref('')
 const page = ref(1)
 const size = ref(20)
@@ -94,6 +132,7 @@ const typeOptions = [
 ]
 
 const columns = [
+  { type: 'selection' },
   { title: 'ID', key: 'id', width: 60 },
   { title: () => t('mailbox_email'), key: 'email', width: 240 },
   {
@@ -248,6 +287,98 @@ async function handleCreate() {
   }
 }
 
+const batchText = computed(() =>
+  batchResult.value.map(m => `${m.email}----${m.password}`).join('\n')
+)
+
+function openBatch() {
+  batchResult.value = []
+  batchForm.value = { domain: domainOptions.value.length ? domainOptions.value[0].value : '', count: 10 }
+  showBatch.value = true
+}
+
+function closeBatch() {
+  showBatch.value = false
+  if (batchResult.value.length) {
+    batchResult.value = []
+    fetchData()
+  }
+}
+
+async function handleBatch() {
+  if (!batchForm.value.domain || !batchForm.value.count) {
+    message.warning(t('mailbox_batch_require'))
+    return false
+  }
+  try {
+    const { data } = await batchCreateMailboxes({
+      domain: batchForm.value.domain,
+      count: batchForm.value.count
+    })
+    batchResult.value = data.mailboxes || []
+    if (data.created < data.requested) {
+      message.warning(t('mailbox_batch_partial', { created: data.created, requested: data.requested }))
+    } else {
+      message.success(t('mailbox_batch_ok', { count: data.created }))
+    }
+  } catch (e) {
+    message.error(e.response?.data?.error || t('mailbox_create_fail'))
+  }
+  return false // 保持弹窗打开以便导出
+}
+
+function exportBatch() {
+  const blob = new Blob([batchText.value], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  a.href = url
+  a.download = `mailboxes-${stamp}.txt`
+  a.click()
+  URL.revokeObjectURL(url)
+  return false // 导出后不关闭，可重复下载
+}
+
+function onCheckedChange(keys) {
+  checkedRowKeys.value = keys
+  // 把当前页中被勾选的行缓存起来，支持跨页导出
+  const keySet = new Set(keys)
+  mailboxes.value.forEach(row => {
+    if (keySet.has(row.id)) {
+      selectedRowsMap.value[row.id] = row
+    }
+  })
+  // 清掉已取消勾选的缓存
+  Object.keys(selectedRowsMap.value).forEach(id => {
+    if (!keySet.has(Number(id))) delete selectedRowsMap.value[id]
+  })
+}
+
+function clearSelection() {
+  checkedRowKeys.value = []
+  selectedRowsMap.value = {}
+}
+
+function exportSelected() {
+  const rows = checkedRowKeys.value
+    .map(id => selectedRowsMap.value[id])
+    .filter(Boolean)
+  if (!rows.length) {
+    message.warning(t('mailbox_export_empty'))
+    return
+  }
+  const text = rows.map(r => `${r.email}----${r.password_plain || ''}`).join('\n')
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  a.href = url
+  a.download = `mailboxes-selected-${stamp}.txt`
+  a.click()
+  URL.revokeObjectURL(url)
+  message.success(t('mailbox_export_ok', { count: rows.length }))
+}
+
 function confirmDelete(row) {
   const emailCount = row.total_emails || 0
   dialog.warning({
@@ -300,4 +431,7 @@ onMounted(() => {
   border: 1px solid var(--border-color); flex-wrap: wrap;
 }
 .list-count { margin-left: auto; font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; }
+.batch-hint { margin-top: 8px; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+.batch-done { margin-bottom: 10px; font-size: 13px; color: var(--text-secondary); }
+
 </style>

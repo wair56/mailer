@@ -123,6 +123,7 @@ func main() {
 		// 邮箱管理
 		admin.GET("/mailboxes", handler.AdminListMailboxes)
 		admin.POST("/mailboxes", handler.AdminCreateMailbox)
+		admin.POST("/mailboxes/batch", handler.AdminBatchCreateMailbox)
 		admin.PUT("/mailboxes/:id", handler.AdminUpdateMailbox)
 		admin.DELETE("/mailboxes/:id", handler.AdminDeleteMailbox)
 
